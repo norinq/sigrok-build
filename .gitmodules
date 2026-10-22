@@ -1,0 +1,24 @@
+[submodule "dependencies/libserialport"]
+	path = dependencies/libserialport
+	url = https://github.com/sigrokproject/libserialport.git
+[submodule "dependencies/libsigrok"]
+	path = dependencies/libsigrok
+	url = https://github.com/sigrokproject/libsigrok.git
+[submodule "dependencies/libsigrokdecode"]
+	path = dependencies/libsigrokdecode
+	url = https://github.com/sigrokproject/libsigrokdecode.git
+[submodule "dependencies/sigrok-firmware"]
+	path = dependencies/sigrok-firmware
+	url = https://github.com/sigrokproject/sigrok-firmware.git
+[submodule "dependencies/sigrok-firmware-fx2lafw"]
+	path = dependencies/sigrok-firmware-fx2lafw
+	url = https://github.com/sigrokproject/sigrok-firmware-fx2lafw.git
+[submodule "dependencies/sigrok-dumps"]
+	path = dependencies/sigrok-dumps
+	url = https://github.com/sigrokproject/sigrok-dumps.git
+[submodule "dependencies/sigrok-cli"]
+	path = dependencies/sigrok-cli
+	url = https://github.com/sigrokproject/sigrok-cli.git
+[submodule "dependencies/pulseview"]
+	path = dependencies/pulseview
+	url = https://github.com/sigrokproject/pulseview.git
