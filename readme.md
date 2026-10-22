@@ -4,6 +4,7 @@ I've had enough of using the official sigrok-util scripts for cross-platform bui
 
 ## About This Project
 
+- The `offical` branch builds the official source code.
 - Perhaps because the original project dates back quite a while, it uses a lot of complicated tooling. Getting it to build takes considerable effort and many manual steps. This project aims to provide a one-command build using Makefiles and Git submodules in place of the original Bash scripts.
 - Since I'm rather lazy, I've written and tested scripts for native builds on Debian and cross-compiling Windows versions from Debian. That should cover about 80% of what most people need.
 
