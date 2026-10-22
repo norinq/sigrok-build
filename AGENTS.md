@@ -2,12 +2,13 @@
 
 ## Authority
 - The Chinese version of AGENTS is located at docs/AGENTS_CN.md. Do not modify that file.
+- Follow the requirements in docs/REVIEW.md when conducting reviews.
 - Do not modify any other files in the docs directory.
 - Update docs-codex/HISTORY.md with a brief summary of this operation. Operations from more than 10 entries ago that have already been completed…
 
 ## Design Requirements
 - Focus only on the functionality being modified.
-- Before each modification, stage all current files in Git.
+- Before each modification, stage the files to be modified in Git.
 - Do not modify readme.md unless explicitly instructed to do so.
 - If a file already exists, first analyze and follow the instructions it contains.
 - If a function's author attribution includes authors other than codex, respect the original approach and follow the function's existing style when modifying it.
