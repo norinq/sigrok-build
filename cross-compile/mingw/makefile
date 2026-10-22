@@ -52,7 +52,6 @@ ECHO ?= echo
 
 MXE_REPO ?= git@github.com:mxe/mxe.git
 SOURCES ?= $(abspath $(PATH_MAKEFILE)/../../dependencies)
-PATCHDIR ?= $(PATH_MAKEFILE)
 
 ifeq ($(filter $(TARGET),i686 x86_64),)
 $(error TARGET 必须是 i686 或 x86_64)
@@ -67,7 +66,6 @@ PLATFORMDIR := $(abspath $(BUILD_ROOT)/mingw_$(FLAVOR)_$(SUFFIX))
 BUILDDIR := $(abspath $(BUILDBASE))
 PREFIX := $(abspath $(PREFIXBASE))
 DOWNLOADDIR ?= $(abspath $(PREFIX)/../downloads)
-PYTHON_DOWNLOADS ?= $(DOWNLOADDIR)
 DISTDIR ?= $(abspath $(PREFIX)/../contrib)
 PORTABLEDIR ?= $(BUILDDIR)/portable
 # MXE 保留原有默认存放位置，与其他构建产物分开管理。
@@ -90,8 +88,10 @@ WGET ?= wget -c --quiet
 # git clone --depth 1 用于首次获取仓库；已有目录直接复用，不自动更新本地工具链。
 GIT_CLONE ?= git clone --depth 1
 
-# 保留原脚本的历史 Python 3.4 依赖；不禁用 TLS 证书检查。
-PYTHON_URL ?= https://www.sigrok.org/tmp
+PYTHON_VERSION := 3.13.17
+PYTHON_ARCH := $(if $(filter x86_64,$(TARGET)),amd64,win32)
+PYTHON_NUGET := $(if $(filter x86_64,$(TARGET)),python,pythonx86)
+PYTHON_URL ?= https://www.python.org/ftp/python/$(PYTHON_VERSION)
 
 .PHONY: all
 all: pulseview sigrok-cli
@@ -168,42 +168,35 @@ define configure_source
 	cd "$(BUILDDIR)/$(1)" && "$(SOURCES)/$(1)/configure" $(2)
 endef
 
-
 .PHONY: python
+python: mxe $(DOWNLOADDIR)/python-$(PYTHON_VERSION)-embed-$(PYTHON_ARCH).zip $(DOWNLOADDIR)/$(PYTHON_NUGET)-$(PYTHON_VERSION).nupkg
+	@$(ECHO) "preparing Python $(PYTHON_VERSION) dependency ..."
+	rm -rf "$(PREFIX)/Python/include" "$(PREFIX)/Python/libs" "$(PREFIX)/Python/runtime" "$(BUILDDIR)/python-sdk"
+	mkdir -p "$(PREFIX)/Python/runtime" "$(PREFIX)/Python/libs" "$(BUILDDIR)/python-sdk"
+	unzip -oq "$(DOWNLOADDIR)/$(PYTHON_NUGET)-$(PYTHON_VERSION).nupkg" 'tools/include/*' -d "$(BUILDDIR)/python-sdk"
+	cp -R "$(BUILDDIR)/python-sdk/tools/include" "$(PREFIX)/Python/"
 ifeq ($(TARGET),x86_64)
-python: mxe
+	patch -p1 "$(PREFIX)/Python/include/pyconfig.h" < "$(PATH_MAKEFILE)/pyconfig.patch"
 endif
-python: $(PYTHON_DOWNLOADS)/Python34_$(TARGET).tar.gz $(PYTHON_DOWNLOADS)/python34_$(TARGET).dll $(PYTHON_DOWNLOADS)/python34_$(TARGET).zip
-	@$(ECHO) "preparing Python dependency ..."
-	mkdir -p "$(PREFIX)/Python/runtime" "$(BUILDDIR)/python-sdk"
-ifeq ($(TARGET),x86_64)
-	@test -f "$(PATCHDIR)/pyconfig.patch" || { echo "缺少原脚本补丁：$(PATCHDIR)/pyconfig.patch" >&2; exit 1; }
-endif
-	tar xzf "$(PYTHON_DOWNLOADS)/Python34_$(TARGET).tar.gz" -C "$(BUILDDIR)/python-sdk"
-	cp -R "$(BUILDDIR)/python-sdk/Python34/include" "$(BUILDDIR)/python-sdk/Python34/libs" "$(PREFIX)/Python/"
-ifeq ($(TARGET),x86_64)
-	patch -p1 "$(PREFIX)/Python/include/pyconfig.h" < "$(PATCHDIR)/pyconfig.patch"
-endif
+	unzip -oq "$(DOWNLOADDIR)/python-$(PYTHON_VERSION)-embed-$(PYTHON_ARCH).zip" '*.dll' '*.pyd' 'python313.zip' 'python313._pth' 'LICENSE.txt' -d "$(PREFIX)/Python/runtime"
+	mv "$(PREFIX)/Python/runtime/LICENSE.txt" "$(PREFIX)/Python/runtime/Python-LICENSE.txt"
+	cd "$(PREFIX)/Python/runtime" && "$(MXE)/usr/$(TRIPLET)/bin/gendef" python313.dll
+	$(TRIPLET)-dlltool --dllname python313.dll --def "$(PREFIX)/Python/runtime/python313.def" --output-lib "$(PREFIX)/Python/libs/libpython313.a"
+	rm "$(PREFIX)/Python/runtime/python313.def"
 	mkdir -p "$(PREFIX)/lib/pkgconfig"
-	printf '%s\n' 'prefix=$(PREFIX)' 'exec_prefix=$${prefix}' 'libdir=$${exec_prefix}/lib' 'includedir=$${prefix}/include' 'Name: Python' 'Description: Python library' 'Version: 3.4' 'Libs: $(PREFIX)/Python/libs/libpython34.a' 'Cflags: -I$(PREFIX)/Python/include' > "$(PREFIX)/lib/pkgconfig/python3.pc"
-	cp "$(PYTHON_DOWNLOADS)/python34_$(TARGET).dll" "$(PREFIX)/Python/runtime/python34.dll"
-	cp "$(PYTHON_DOWNLOADS)/python34_$(TARGET).zip" "$(PREFIX)/Python/runtime/python34.zip"
-ifeq ($(TARGET),x86_64)
-	cp "$(PREFIX)/Python/runtime/python34.dll" "$(BUILDDIR)/python34.dll"
-	cd "$(BUILDDIR)" && "$(MXE)/usr/$(TRIPLET)/bin/gendef" python34.dll
-	cd "$(BUILDDIR)" && $(TRIPLET)-dlltool --dllname python34.dll --def python34.def --output-lib "$(PREFIX)/Python/libs/libpython34.a"
-endif
-	unzip -oq "$(PREFIX)/Python/runtime/python34.zip" '*.pyd' -d "$(PREFIX)/Python/runtime"
+	printf '%s\n' 'prefix=$(PREFIX)/Python' 'libdir=$${prefix}/libs' 'includedir=$${prefix}/include' 'Name: Python' 'Description: Python embedding library' 'Version: $(PYTHON_VERSION)' 'Libs: -L$${libdir} -lpython313' 'Cflags: -I$${includedir}' > "$(PREFIX)/lib/pkgconfig/python3.pc"
+	cp "$(PREFIX)/lib/pkgconfig/python3.pc" "$(PREFIX)/lib/pkgconfig/python3-embed.pc"
 	@for runtime_file in "$(PREFIX)/Python/runtime/"*; do \
 		printf 'Delete "$$INSTDIR\\%s"\n' "$${runtime_file##*/}"; \
 	done > "$(PREFIX)/Python/runtime-uninstall.nsh"
 
 
-$(PYTHON_DOWNLOADS)/Python34_$(TARGET).tar.gz $(PYTHON_DOWNLOADS)/python34_$(TARGET).dll $(PYTHON_DOWNLOADS)/python34_$(TARGET).zip: DOWNLOAD_URL = $(PYTHON_URL)/$(@F)
+$(DOWNLOADDIR)/python-$(PYTHON_VERSION)-embed-$(PYTHON_ARCH).zip: DOWNLOAD_URL = $(PYTHON_URL)/$(@F)
+$(DOWNLOADDIR)/$(PYTHON_NUGET)-$(PYTHON_VERSION).nupkg: DOWNLOAD_URL = https://www.nuget.org/api/v2/package/$(PYTHON_NUGET)/$(PYTHON_VERSION)
 $(DOWNLOADDIR)/zadig.exe: DOWNLOAD_URL := https://github.com/pbatard/libwdi/releases/download/b721/zadig-2.4.exe
 $(DOWNLOADDIR)/zadig_xp.exe: DOWNLOAD_URL := https://github.com/pbatard/libwdi/releases/download/v1.2.5/zadig_xp-2.2.exe
 
-$(PYTHON_DOWNLOADS)/Python34_$(TARGET).tar.gz $(PYTHON_DOWNLOADS)/python34_$(TARGET).dll $(PYTHON_DOWNLOADS)/python34_$(TARGET).zip $(DOWNLOADDIR)/zadig.exe $(DOWNLOADDIR)/zadig_xp.exe:
+$(DOWNLOADDIR)/python-$(PYTHON_VERSION)-embed-$(PYTHON_ARCH).zip $(DOWNLOADDIR)/$(PYTHON_NUGET)-$(PYTHON_VERSION).nupkg $(DOWNLOADDIR)/zadig.exe $(DOWNLOADDIR)/zadig_xp.exe:
 	mkdir -p "$(@D)"
 	$(WGET) "$(DOWNLOAD_URL)" -O "$@.part" && mv "$@.part" "$@"
 
@@ -267,8 +260,12 @@ pulseview-installer: pulseview-build runtime sigrok-dumps
 sigrok-cli-installer pulseview-installer:
 	mkdir -p "$(DISTDIR)"
 	sed -i -e 's|$${CROSS}/zadig|$${ZADIG_DIR}/zadig|g' \
-		-e 's|$${CROSS}/python34\.|$${CROSS}/Python/runtime/python34.|g' \
-		-e 's|$${CROSS}/\*\.pyd|$${CROSS}/Python/runtime/*.pyd|g' \
+		-e '/^[[:space:]]*File .*python34\.dll/c\\tFile "$${CROSS}/Python/runtime/*"' \
+		-e '/^[[:space:]]*File .*python34\.zip/d' \
+		-e '/^[[:space:]]*File .*\*\.pyd/d' \
+		-e '/^[[:space:]]*Delete .*python34\.dll/c\\t!include "$${CROSS}/Python/runtime-uninstall.nsh"' \
+		-e '/^[[:space:]]*Delete .*python34\.zip/d' \
+		-e '/^[[:space:]]*Delete .*\*\.pyd/d' \
 		"$(BUILDDIR)/$(patsubst %-installer,%,$@)/contrib/$(patsubst %-installer,%,$@)_cross.nsi"
 	cd "$(BUILDDIR)/$(patsubst %-installer,%,$@)" && \
 		installer=$$(sed -n 's/^OutFile "\(.*\)"$$/\1/p' "contrib/$(patsubst %-installer,%,$@)_cross.nsi") && \
